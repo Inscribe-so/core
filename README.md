@@ -1,5 +1,13 @@
 # Inscribe Contracts
 
+Inscribe is a protocol that allows anyone to add arbitrary metadata on top of existing NFTs across any chain.
+
+Media that can be attached may include photos, videos, text.
+
+Use cases include hand written signatures, attaching trophies or badges for winning a tournament, and more!
+
+For a specific usecase, visit our authentic handwritten signatures platform at https://inscribe.so
+
 ### Init
 
 Installs the latest dependieces required to run and deploy the Inscribe smart contracts
