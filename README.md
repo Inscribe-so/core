@@ -1,6 +1,6 @@
 # Inscribe Contracts
 
-Inscribe is a protocol that allows anyone to add arbitrary metadata on top of existing NFTs across any chain.
+Inscribe is a protocol that allows anyone to add arbitrary metadata on top of existing NFTs.
 
 Media that can be attached may include photos, videos, text.
 
