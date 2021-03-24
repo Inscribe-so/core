@@ -8,7 +8,6 @@ interface InscribeInterface {
     struct NFTLocation {
         address nftAddress;
         uint256 tokenId;
-        uint256 chainId;
     }
 
     struct InscriptionData {
@@ -22,44 +21,80 @@ interface InscribeInterface {
         InscriptionData data;
     }
 
+    /**
+     * @dev Emitted when an 'owner' gives an 'inscriber' one time approval to add or remove an inscription for
+     * the 'tokenId' at 'nftAddress'.
+     */
+    event Approval(address indexed owner, address indexed inscriber, address indexed nftAddress, uint256 tokenId);
+    
+    // Emitted when an 'owner' gives or removes an 'operator' approval to add or remove inscriptions to all of their NFTs.
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
     // Emitted when an inscription is added to an NFT at 'nftAddress' with 'tokenId'
-    event InscriptionAdded(bytes32 indexed inscriptionId, 
+    event InscriptionAdded(uint256 indexed inscriptionId, 
                             address indexed nftAddress,
                             uint256 tokenId, 
-                            uint256 chainId, 
                             address indexed inscriber, 
                             bytes32 contentHash,
                             string inscriptionURI);
 
-    // Emitted when a user adjusts their white list permissions
-    event WhitelistAdjusted(bytes32 inscriptionId, bool permission);
+    // Emitted when an inscription is removed from an NFT at 'nftAddress' with 'tokenId'
+    event InscriptionRemoved(uint256 indexed inscriptionId, 
+                            address indexed nftAddress, 
+                            uint256 tokenId, 
+                            address indexed inscriber, 
+                            bytes32 contentHash,
+                            string inscriptionURI);
+
+    function getSigNonce(address inscriber) external view returns (uint256);
+
+    /**
+     * @dev Fetches the inscription location at inscriptionID
+     * 
+     * Requirements:
+     *
+     * - `inscriptionID` inscriptionID must exist
+     * 
+     */
+    function getNFTLocation(uint256 inscriptionId) external view returns (address nftAddress, uint256 tokenId);
+
+    /**
+     * @dev Fetches the inscription location at inscriptionID
+     * 
+     * Requirements:
+     *
+     * - `inscriptionID` inscriptionID must exist
+     * 
+     */
+    function getInscriptionData(uint256 inscriptionId) external view returns (address inscriber, bytes32 contentHash, string memory inscriptionURI);
+
+    /**
+     * @dev Gives `inscriber` a one time approval to add or remove an inscription for `tokenId` at `nftAddress`
+     */
+    function approve(address inscriber, address nftAddress, uint256 tokenId) external;
     
     /**
-     * @dev Fetches the permission for if an owner has allowed the inscription at inscriptionId
-     * If this value is false, front end must not display the inscription.
-     */ 
-    function getPermission(bytes32 inscriptionId, address owner) external view returns (bool);
-
-    /**
-     * @dev Fetches the inscription location at inscriptionID
-     * 
+     * @dev Similar to the ERC721 implementation, Approve or remove `operator` as an operator for the caller.
+     * Operators can call {addInscriptionWithSig} or {addInscription} for any nft owned by the caller.
+     *
      * Requirements:
      *
-     * - `inscriptionID` inscriptionID must exist
-     * 
-     */
-    function getNFTLocation(bytes32 inscriptionId) external view returns (address nftAddress, uint256 tokenId, uint256 chainId);
-
-    /**
-     * @dev Fetches the inscription location at inscriptionID
-     * 
-     * Requirements:
+     * - The `operator` cannot be the caller.
      *
-     * - `inscriptionID` inscriptionID must exist
-     * 
+     * Emits an {ApprovalForAll} event.
      */
-    function getInscriptionData(bytes32 inscriptionId) external view returns (address inscriber, bytes32 contentHash, string memory inscriptionURI);
-
+    function setApprovalForAll(address operator, bool approved) external;
+    
+    /*
+    * @dev Returns the `address` approved for the `tokenId` at `nftAddress`
+    */
+    function getApproved(address nftAddress, uint256 tokenId) external view returns (address);
+    
+    /**
+     * @dev Returns if the `operator` is allowed to inscribe or remove inscriptions for all nfts owned by `owner`
+     *
+     */
+    function isApprovedForAll(address owner, address operator) external view returns (bool);
     
      /**
      * @dev Fetches the inscriptionURI at inscriptionID
@@ -69,15 +104,12 @@ interface InscribeInterface {
      * - `inscriptionID` inscriptionID must exist
      * 
      */  
-    function getInscriptionURI(bytes32 inscriptionId) external view returns (string memory inscriptionURI);
+    function getInscriptionURI(uint256 inscriptionId) external view returns (string memory inscriptionURI);
     
-    function setPermissions(bytes32[] memory inscriptionIds, bool[] memory permissions) external;
-
     /**
      * @dev Adds an inscription on-chain to the specified nft
      * @param location          The nft contract address
      * @param data              The tokenId of the NFT that is being signed
-     * @param addWhiteList      The inscription meta data ID associated with the inscription
      * @param sig               An optional URI, to not set this, pass the empty string ""
      * 
      * Requirements:
@@ -89,10 +121,16 @@ interface InscribeInterface {
     function addInscription(
         NFTLocation memory location,
         InscriptionData memory data,
-        bool addWhiteList,
         bytes memory sig
     ) external;
-
     
-    function getNextInscriptionId(NFTLocation memory location) external view returns (bytes32);
+    /**
+     * @dev Removes inscription on-chain.
+     * @param inscriptionId   The ID of the inscription that will be removed
+     * 
+     * Requirements:
+     * 
+     * - `inscriptionId` The user calling this method must own the `tokenId` at `nftAddress` of the inscription at `inscriptionId` or has been approved
+     */
+    function removeInscription(uint256 inscriptionId) external;
 }
