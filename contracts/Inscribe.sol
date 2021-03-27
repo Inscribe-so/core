@@ -28,7 +28,7 @@ contract Inscribe is InscribeInterface {
     uint256 latestInscriptionId;
 
     //keccak256("AddInscription(address nftAddress,uint256 tokenId,bytes32 contentHash,string inscriptionURI,uint256 nonce)");
-    bytes32 public constant ADD_INSCRIPTION_TYPEHASH = 0x151052e7e52b0f0ec660ece1cc8d4e6463502663c19230798feeae51d10c8556;
+    bytes32 public constant ADD_INSCRIPTION_TYPEHASH = 0x99f09b8ad757cd1f8ab590345da90b17fda97f2efe9ce277cb9e1f20fc830466;
 
     constructor () {
         latestInscriptionId = 1;
