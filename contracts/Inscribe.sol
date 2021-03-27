@@ -1,13 +1,12 @@
-pragma experimental ABIEncoderV2;
-pragma solidity 0.7.4;
+pragma solidity 0.8.0;
 
 // SPDX-License-Identifier: MIT
 
 import "./InscribeInterface.sol";
 
-import "../node_modules/@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "../node_modules/@openzeppelin/contracts/utils/Strings.sol";
-import "../node_modules/@openzeppelin/contracts/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 
 contract Inscribe is InscribeInterface {
