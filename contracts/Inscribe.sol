@@ -3,18 +3,94 @@ pragma solidity 0.8.0;
 // SPDX-License-Identifier: MIT
 
 import "./InscribeInterface.sol";
-
+import "./InscribeMetaDataInterface.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 
-contract Inscribe is InscribeInterface {
+contract InscribeMetadata is InscribeMetaDataInterface {
+    
+    struct BaseURI {
+        string baseUri;
+        address owner;
+    }
+    
+    // Mapping from baseUriId to a BaseURI struct
+    mapping (uint256 => BaseURI) internal _baseUriMapping;
+        
+    /**
+     * @dev The latest baseUriId. This ID increases by 1 every time a new 
+     * base URI is created.
+     */ 
+    uint256 internal latestBaseUriId;
+
+    /**
+     * @dev See {InscribeMetaDataInterface-addBaseURI}.
+     */
+    function addBaseURI(string memory baseUri) public override {
+        emit BaseURIAdded(latestBaseUriId, baseUri);
+        _baseUriMapping[latestBaseUriId] = BaseURI(baseUri, msg.sender);
+        latestBaseUriId++;
+    }
+    
+    /**
+     * @dev See {InscribeMetaDataInterface-migrateBaseURI}.
+     */
+    function migrateBaseURI(uint256 baseUriId, string memory baseUri) external override {
+        BaseURI memory uri = _baseUriMapping[baseUriId];
+
+        require(_baseURIExists(uri), "Base URI does not exist");
+        require(uri.owner == msg.sender, "Only owner of the URI may migrate the URI");
+        
+        emit BaseURIModified(baseUriId, baseUri);
+        _baseUriMapping[baseUriId] = BaseURI(baseUri, msg.sender);
+    }
+
+    /**
+     * @dev See {InscribeMetaDataInterface-getBaseURI}.
+     */
+    function getBaseURI(uint256 baseUriId) public view override returns (string memory baseURI) {
+        BaseURI memory uri = _baseUriMapping[baseUriId];
+        require(_baseURIExists(uri), "Base URI does not exist");
+        return uri.baseUri;
+    }
+    
+    /**
+     * @dev Verifies if the base URI at the specified Id exists
+     */ 
+    function _baseURIExists(BaseURI memory uri) internal pure returns (bool) {
+        return uri.owner != address(0);
+    }
+}
+
+
+contract Inscribe is InscribeInterface, InscribeMetadata {
     using Strings for uint256;
     using ECDSA for bytes32;
         
-    // Storage of inscriptions
-    mapping (uint256 => Inscription) private _inscriptions;
+    // --- Storage of inscriptions ---
+
+    // In order to save storage, we emit the contentHash instead of storing it on chain
+    // Thus frontends must verify that the content hash that was emitted must match 
+
+    // Mapping from inscription ID to the address of the inscriber
+    mapping (uint256 => address) private _inscribers;
+
+    // Mapping from inscription Id to a hash of the nftAddress and tokenId
+    mapping (uint256 => bytes32) private _locationHashes;
+
+    // mapping from inscription ID to base URI IDs
+    // Inscriptions managed by an operator use base uri
+    // URIs are of the form {baseUrl}/{inscriptionId}
+    mapping (uint256 => uint256) private _baseURIIds;
+
+    // mapping from inscription ID to inscriptionURI
+    // for self managed sigs. 
+    // For example: ipfs sigs
+    mapping (uint256 => string) private _inscriptionURIs;
+
+    // --- Approvals ---
 
     // Mapping from an NFT address to a mapping of a token ID to an approved address
     mapping (address => mapping (uint256 => address)) private _inscriptionApprovals;
@@ -22,31 +98,48 @@ contract Inscribe is InscribeInterface {
     // Mapping from owner to operator approvals
     mapping (address => mapping (address => bool)) private _operatorApprovals;
 
-    mapping (address => uint256) private _sigNonces;
+    bytes32 public immutable domainSeparator;
 
+    // Used for calculationg inscription Ids when adding without a sig
     uint256 latestInscriptionId;
 
-    //keccak256("AddInscription(address nftAddress,uint256 tokenId,bytes32 contentHash,string inscriptionURI,uint256 nonce)");
-    bytes32 public constant ADD_INSCRIPTION_TYPEHASH = 0x99f09b8ad757cd1f8ab590345da90b17fda97f2efe9ce277cb9e1f20fc830466;
+    //keccak256("AddInscription(address nftAddress,uint256 tokenId,bytes32 contentHash,uint256 nonce)");
+    bytes32 public constant ADD_INSCRIPTION_TYPEHASH = 0x6b7aae47ef1cd82bf33fbe47ef7d5d948c32a966662d56eb728bd4a5ed1082ea;
 
     constructor () {
+        latestBaseUriId = 1;
         latestInscriptionId = 1;
+
+        uint256 chainID;
+
+        assembly {
+            chainID := chainid()
+        }
+
+        domainSeparator = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256(bytes("Inscribe")),
+                keccak256(bytes("1")),
+                chainID,
+                address(this)
+            )
+        );
     }
 
-    function getSigNonce(address inscriber) external view override returns (uint256) {
-        return _sigNonces[inscriber];
+    // - Complete
+    function getInscriber(uint256 inscriptionId) external view override returns (address) {
+        address inscriber = _inscribers[inscriptionId];
+        require(inscriber != address(0), "Inscription does not exist");
+        return inscriber;
     }
 
-    function getNFTLocation(uint256 inscriptionId) external view override returns (address nftAddress, uint256 tokenId) {
-        require(_inscriptionExists(inscriptionId), "Inscription does not exist.");
-        NFTLocation memory location = _inscriptions[inscriptionId].location;
-        return (location.nftAddress, location.tokenId);
-    }
-
-    function getInscriptionData(uint256 inscriptionId) external view override returns (address inscriber, bytes32 contentHash, string memory inscriptionURI) {
-        require(_inscriptionExists(inscriptionId), "Inscription does not exist.");
-        InscriptionData memory data = _inscriptions[inscriptionId].data;
-        return (data.inscriber, data.contentHash, data.inscriptionURI);
+    // - Verifies that `inscriptionId` is inscribed to the NFT at `nftAddress`, `tokenId`
+    function verifyInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) public view override returns (bool) {
+        bytes32 locationHash = _locationHashes[inscriptionId];
+        return locationHash == keccak256(abi.encodePacked(nftAddress, tokenId));
     }
 
     /**
@@ -54,8 +147,16 @@ contract Inscribe is InscribeInterface {
      */
     function getInscriptionURI(uint256 inscriptionId) external view override returns (string memory inscriptionURI) {
         require(_inscriptionExists(inscriptionId), "Inscription does not exist");
-        Inscription memory inscription = _inscriptions[inscriptionId];
-        return inscription.data.inscriptionURI;
+                
+        uint256 baseUriId = _baseURIIds[inscriptionId];
+
+        if (baseUriId == 0) {
+            return _inscriptionURIs[inscriptionId];
+        } else {
+            BaseURI memory uri = _baseUriMapping[baseUriId];
+            require(_baseURIExists(uri), "Base URI does not exist");
+            return string(abi.encodePacked(uri.baseUri, inscriptionId.toString()));
+        }
     }
 
     /**
@@ -95,42 +196,142 @@ contract Inscribe is InscribeInterface {
     function isApprovedForAll(address owner, address operator) public view override returns (bool) {
         return _operatorApprovals[owner][operator];
     }
+
+    // Called by inscription operators, smart contracts, or if the user wants to inscribe
+    // their own nfts
+    function addInscriptionWithNoSig(
+        address nftAddress,
+        uint256 tokenId,
+        bytes32 contentHash,
+        uint256 baseUriId
+    ) external override {
+        require(nftAddress != address(0));
+        require(baseUriId != 0);
+
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId));
+        
+        BaseURI memory uri = _baseUriMapping[baseUriId];
+        require(_baseURIExists(uri), "Base URI does not exist");
+        _baseURIIds[latestInscriptionId] = baseUriId;
+
+        _addInscription(nftAddress, tokenId, msg.sender, contentHash, latestInscriptionId);
+
+        latestInscriptionId++;
+    }
     
     /**
      * @dev See {InscribeInterface-addInscription}.
      */
-    function addInscription(
-        NFTLocation memory location,
-        InscriptionData memory data,
-        bytes memory sig
+    function addInscriptionWithBaseUriId(
+        address nftAddress,
+        uint256 tokenId,
+        address inscriber,
+        bytes32 contentHash,
+        uint256 baseUriId,
+        uint256 nonce,
+        bytes calldata sig
     ) external override {
-        require(data.inscriber != address(0));
-        require(location.nftAddress != address(0));
-
-
-        Inscription memory inscription = Inscription(location, data);
-
-        bytes32 digest = _generateAddInscriptionHash(inscription);
+        require(inscriber != address(0));
+        require(nftAddress != address(0));
+        
+        bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
 
         // Verifies the signature
-        require(_recoverSigner(digest, sig) == inscription.data.inscriber, "Address does not match signature");
+        require(_isApprovedOrOwner(_recoverSigner(digest, sig), nftAddress, tokenId), "Inscription does not belong to owner");
 
-        _addInscription(inscription, latestInscriptionId);
+        uint256 inscriptionId = latestInscriptionId;
+
+        // Add metadata
+        BaseURI memory uri = _baseUriMapping[baseUriId];
+        require(_baseURIExists(uri), "Base URI does not exist");
+        _baseURIIds[inscriptionId] = baseUriId;
+
+        // Store inscription
+        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
 
         latestInscriptionId++;
     }
 
-        /**
+    /**
+     * @dev See {InscribeInterface-addInscription}.
+     */
+    function addInscriptionWithInscriptioniUri(
+        address nftAddress,
+        uint256 tokenId,
+        address inscriber,
+        bytes32 contentHash,
+        string calldata inscriptionURI,
+        uint256 nonce,
+        bytes calldata sig
+    ) external override {
+        require(inscriber != address(0));
+        require(nftAddress != address(0));
+        
+        bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
+
+        // Verifies the signature
+        require(_isApprovedOrOwner(_recoverSigner(digest, sig), nftAddress, tokenId));
+
+        // Add metadata 
+        // Base URI Id is set to 0 in the case where sigs include an inscriptionURI
+        uint256 inscriptionId = latestInscriptionId;
+
+        _baseURIIds[inscriptionId] = 0;
+        _inscriptionURIs[inscriptionId] = inscriptionURI;
+
+        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
+        
+        latestInscriptionId++;
+    }
+
+    /**
      * @dev See {InscribeInterface-removeInscription}.
      */
-    function removeInscription(uint256 inscriptionId) external override {
-        Inscription memory inscription = _inscriptions[inscriptionId];
+    function removeInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) external override {
         require(_inscriptionExists(inscriptionId), "Inscription does not exist at this ID");
 
-        // Verifies that the msg.sender has permissions to remove an inscription
-        require(_isApprovedOrOwner(msg.sender, inscription.location.nftAddress, inscription.location.tokenId), "Caller does not own inscription or is not approved");
+        require(verifyInscription(inscriptionId, nftAddress, tokenId), "Verifies nftAddress and tokenId are legitimate");
 
-        _removeInscription(inscription, inscriptionId);
+        // Verifies that the msg.sender has permissions to remove an inscription
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "Caller does not own inscription or is not approved");
+
+        _removeInscription(inscriptionId, nftAddress, tokenId);
+    }
+
+    // -- Migrating URIs
+
+    // Migrations are necessary if you would like an inscription operator to host your content hash
+    // 
+    function migrateURI(
+        uint256 inscriptionId, 
+        uint256 baseUriId, 
+        address nftAddress, 
+        uint256 tokenId
+    ) external override {
+        require(_inscriptionExists(inscriptionId), "Inscription does not exist at this ID");
+
+        require(verifyInscription(inscriptionId, nftAddress, tokenId), "Verifies nftAddress and tokenId are legitimate");
+
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "Caller does not own inscription or is not approved");
+
+        _baseURIIds[inscriptionId] = baseUriId;
+        delete _inscriptionURIs[inscriptionId];
+    }
+
+    function migrateURI(
+        uint256 inscriptionId, 
+        string calldata inscriptionURI, 
+        address nftAddress, 
+        uint256 tokenId
+    ) external override{
+        require(_inscriptionExists(inscriptionId), "Inscription does not exist at this ID");
+
+        require(verifyInscription(inscriptionId, nftAddress, tokenId), "Verifies nftAddress and tokenId are legitimate");
+
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "Caller does not own inscription or is not approved");
+
+        _baseURIIds[inscriptionId] = 0;
+        _inscriptionURIs[inscriptionId] = inscriptionURI;
     }
 
     /**
@@ -165,52 +366,63 @@ contract Inscribe is InscribeInterface {
     /**
      * @dev Removes an inscription on-chain after all requirements were met
      */
-    function _removeInscription(Inscription memory inscription, uint256 inscriptionId) private {
+    function _removeInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) private {
         // Clear approvals from the previous inscriber
-        _approve(address(0), inscription.location.nftAddress, inscription.location.tokenId);
+        _approve(address(0), nftAddress, tokenId);
         
         // Remove Inscription
-        delete _inscriptions[inscriptionId];
-        
+        address inscriber = _inscribers[inscriptionId];
+
+        delete _inscribers[inscriptionId];
+        delete _locationHashes[inscriptionId];
+        delete _inscriptionURIs[inscriptionId];
+
         emit InscriptionRemoved(
             inscriptionId, 
-            inscription.location.nftAddress, 
-            inscription.location.tokenId, 
-            inscription.data.inscriber, 
-            inscription.data.contentHash,
-            inscription.data.inscriptionURI);
+            nftAddress,
+            tokenId,
+            inscriber);
     }
     
     /**
     * @dev Adds an inscription on-chain with optional URI after all requirements were met
     */
-    function _addInscription(Inscription memory inscription, uint256 inscriptionId) private {
-                        
-        _inscriptions[inscriptionId] = inscription;
+    function _addInscription(
+        address nftAddress,
+        uint256 tokenId,
+        address inscriber,
+        bytes32 contentHash,
+        uint256 inscriptionId
+    ) private {
+
+        _inscribers[inscriptionId] = inscriber;
+        _locationHashes[inscriptionId] = keccak256(abi.encodePacked(nftAddress, tokenId));
+
         emit InscriptionAdded(
             inscriptionId, 
-            inscription.location.nftAddress, 
-            inscription.location.tokenId, 
-            inscription.data.inscriber, 
-            inscription.data.contentHash, 
-            inscription.data.inscriptionURI);
+            nftAddress, 
+            tokenId, 
+            inscriber, 
+            contentHash
+        );
     }
     
     /**
      * @dev Verifies if an inscription at `inscriptionID` exists
      */ 
     function _inscriptionExists(uint256 inscriptionId) private view returns (bool) {
-        return _inscriptions[inscriptionId].data.inscriber != address(0);
+        return _inscribers[inscriptionId] != address(0);
     }
 
     /**
      * @dev Generates the EIP712 hash that was signed
      */ 
     function _generateAddInscriptionHash(
-        Inscription memory inscription
+        address nftAddress,
+        uint256 tokenId,
+        bytes32 contentHash,
+        uint256 nonce
     ) private view returns (bytes32) {
-
-        bytes32 domainSeparator = _calculateDomainSeparator();
 
         // Recreate signed message 
         return keccak256(
@@ -220,11 +432,10 @@ contract Inscribe is InscribeInterface {
                 keccak256(
                     abi.encode(
                         ADD_INSCRIPTION_TYPEHASH,
-                        inscription.location.nftAddress,
-                        inscription.location.tokenId,
-                        inscription.data.contentHash,
-                        keccak256(bytes(inscription.data.inscriptionURI)),
-                        _sigNonces[inscription.data.inscriber]
+                        nftAddress,
+                        tokenId,
+                        contentHash,
+                        nonce
                     )
                 )
             )
@@ -234,31 +445,6 @@ contract Inscribe is InscribeInterface {
     function _recoverSigner(bytes32 _hash, bytes memory _sig) private pure returns (address) {
         address signer = ECDSA.recover(_hash, _sig);
         require(signer != address(0));
-
         return signer;
-    }
-
-    /**
-     * @dev Calculates EIP712 DOMAIN_SEPARATOR based on the current contract and chain ID.
-     */
-    function _calculateDomainSeparator() private view returns (bytes32) {
-        uint256 chainID;
-        /* solium-disable-next-line */
-        assembly {
-            chainID := chainid()
-        }
-
-        return
-            keccak256(
-                abi.encode(
-                    keccak256(
-                        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-                    ),
-                    keccak256(bytes("Inscribe")),
-                    keccak256(bytes("1")),
-                    chainID,
-                    address(this)
-                )
-            );
     }
 }
