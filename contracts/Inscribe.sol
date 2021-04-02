@@ -90,6 +90,8 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     // For example: ipfs sigs
     mapping (uint256 => string) private _inscriptionURIs;
 
+    mapping (address => mapping (uint256 => bool)) private _usedNonces;
+
     // --- Approvals ---
 
     // Mapping from an NFT address to a mapping of a token ID to an approved address
@@ -233,11 +235,14 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     ) external override {
         require(inscriber != address(0));
         require(nftAddress != address(0));
-        
+        require(!_usedNonces[inscriber][nonce], "Nonce already used");
+
         bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
 
         // Verifies the signature
-        require(_isApprovedOrOwner(_recoverSigner(digest, sig), nftAddress, tokenId), "Inscription does not belong to owner");
+        require(_recoverSigner(digest, sig) == inscriber, "Recovered address does not match inscriber");
+
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "NFT does not belong to msg sender");
 
         uint256 inscriptionId = latestInscriptionId;
 
@@ -245,6 +250,8 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         BaseURI memory uri = _baseUriMapping[baseUriId];
         require(_baseURIExists(uri), "Base URI does not exist");
         _baseURIIds[inscriptionId] = baseUriId;
+
+        _usedNonces[inscriber][nonce] = true;
 
         // Store inscription
         _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
@@ -266,18 +273,23 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     ) external override {
         require(inscriber != address(0));
         require(nftAddress != address(0));
+        require(!_usedNonces[inscriber][nonce], "Nonce already used");
         
         bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
 
         // Verifies the signature
-        require(_isApprovedOrOwner(_recoverSigner(digest, sig), nftAddress, tokenId));
+        require(_recoverSigner(digest, sig) == inscriber, "Recovered address does not match inscriber");
 
+        require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "NFT does not belong to msg sender");
+        
         // Add metadata 
         // Base URI Id is set to 0 in the case where sigs include an inscriptionURI
         uint256 inscriptionId = latestInscriptionId;
 
         _baseURIIds[inscriptionId] = 0;
         _inscriptionURIs[inscriptionId] = inscriptionURI;
+
+        _usedNonces[inscriber][nonce] = true;
 
         _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
         

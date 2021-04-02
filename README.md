@@ -47,4 +47,4 @@ truffle run verify Inscribe --network rinkeby
 ### Latest Contract Deployments
 
 #### Rinkeby
-https://rinkeby.etherscan.io/address/0x32Db224674340d1a431BE8d62E21563931B7B891#contracts
+https://rinkeby.etherscan.io/address/0x7433CbD913113A1A3CeAe998BB775FB9D17e6139#contracts
