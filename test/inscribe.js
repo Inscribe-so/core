@@ -64,9 +64,6 @@ contract('Inscribe', (accounts) => {
     
     await nftFactory.mint(accounts[0], 1);
 
-    console.log(await inscribeNFT.ownerOf(1));
-    console.log(accounts[0]);
-
     await inscribeMetaData.addBaseURI("https://inscribe.so/");
 
     await inscribe.addInscriptionWithBaseUriId(nftFactory.address, 
@@ -114,7 +111,6 @@ contract('Inscribe', (accounts) => {
 
   it('should get the correct inscription URI from an operator', async () => {
     let uri = await inscribeMetaData.getBaseURI(1);
-    console.log(uri);
     assert.equal(await inscribe.getInscriptionURI(1), "https://inscribe.so/1");
   });
 

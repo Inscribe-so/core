@@ -144,6 +144,11 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         return locationHash == keccak256(abi.encodePacked(nftAddress, tokenId));
     }
 
+    // - Returns whether the nonce has been submitted before.
+    function verifyNonce(address inscriber, uint256 nonce) external view returns (bool) {
+        return _usedNonces[inscriber][nonce];
+    }
+
     /**
      * @dev See {InscribeInterface-getInscriptionURI}.
      */
@@ -281,9 +286,8 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         require(_recoverSigner(digest, sig) == inscriber, "Recovered address does not match inscriber");
 
         require(_isApprovedOrOwner(msg.sender, nftAddress, tokenId), "NFT does not belong to msg sender");
-        
+
         // Add metadata 
-        // Base URI Id is set to 0 in the case where sigs include an inscriptionURI
         uint256 inscriptionId = latestInscriptionId;
 
         _baseURIIds[inscriptionId] = 0;
