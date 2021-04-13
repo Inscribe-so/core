@@ -90,7 +90,8 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     // For example: ipfs sigs
     mapping (uint256 => string) private _inscriptionURIs;
 
-    mapping (address => mapping (uint256 => bool)) private _usedNonces;
+    // mapping from an inscriber address to a mapping of location hash to nonces
+    mapping (address => mapping (bytes32 => uint256)) private _nonces;
 
     // --- Approvals ---
 
@@ -144,9 +145,10 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         return locationHash == keccak256(abi.encodePacked(nftAddress, tokenId));
     }
 
-    // - Returns whether the nonce has been submitted before.
-    function verifyNonce(address inscriber, uint256 nonce) external view returns (bool) {
-        return _usedNonces[inscriber][nonce];
+    // - Returns the current nonce used for signing. This nonce is unique per inscirber and token id.
+    function getNonce(address inscriber, address nftAddress, uint256 tokenId) external view returns (uint256) {
+        bytes32 locationHash = keccak256(abi.encodePacked(nftAddress, tokenId));
+        return _nonces[inscriber][locationHash];
     }
 
     /**
@@ -221,7 +223,9 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         require(_baseURIExists(uri), "Base URI does not exist");
         _baseURIIds[latestInscriptionId] = baseUriId;
 
-        _addInscription(nftAddress, tokenId, msg.sender, contentHash, latestInscriptionId);
+        bytes32 locationHash = keccak256(abi.encodePacked(nftAddress, tokenId));
+
+        _addInscription(nftAddress, tokenId, msg.sender, contentHash, latestInscriptionId, locationHash);
 
         latestInscriptionId++;
     }
@@ -240,7 +244,9 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     ) external override {
         require(inscriber != address(0));
         require(nftAddress != address(0));
-        require(!_usedNonces[inscriber][nonce], "Nonce already used");
+
+        bytes32 locationHash = keccak256(abi.encodePacked(nftAddress, tokenId));
+        require(_nonces[inscriber][locationHash] == nonce, "Nonce mismatch, sign again with the nonce from `getNonce`");
 
         bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
 
@@ -256,10 +262,11 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         require(_baseURIExists(uri), "Base URI does not exist");
         _baseURIIds[inscriptionId] = baseUriId;
 
-        _usedNonces[inscriber][nonce] = true;
+        // Update nonce
+        _nonces[inscriber][locationHash]++;
 
         // Store inscription
-        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
+        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId, locationHash); 
 
         latestInscriptionId++;
     }
@@ -278,8 +285,10 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     ) external override {
         require(inscriber != address(0));
         require(nftAddress != address(0));
-        require(!_usedNonces[inscriber][nonce], "Nonce already used");
-        
+
+        bytes32 locationHash = keccak256(abi.encodePacked(nftAddress, tokenId));
+        require(_nonces[inscriber][locationHash] == nonce, "Nonce mismatch, sign again with the nonce from `getNonce`");
+
         bytes32 digest = _generateAddInscriptionHash(nftAddress, tokenId, contentHash, nonce);
 
         // Verifies the signature
@@ -293,9 +302,10 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         _baseURIIds[inscriptionId] = 0;
         _inscriptionURIs[inscriptionId] = inscriptionURI;
 
-        _usedNonces[inscriber][nonce] = true;
+        // Update nonce
+        _nonces[inscriber][locationHash]++;
 
-        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId); 
+        _addInscription(nftAddress, tokenId, inscriber, contentHash, inscriptionId, locationHash); 
         
         latestInscriptionId++;
     }
@@ -408,11 +418,12 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         uint256 tokenId,
         address inscriber,
         bytes32 contentHash,
-        uint256 inscriptionId
+        uint256 inscriptionId,
+        bytes32 locationHash
     ) private {
 
         _inscribers[inscriptionId] = inscriber;
-        _locationHashes[inscriptionId] = keccak256(abi.encodePacked(nftAddress, tokenId));
+        _locationHashes[inscriptionId] = locationHash;
 
         emit InscriptionAdded(
             inscriptionId, 

@@ -47,7 +47,7 @@ contract('Inscribe', (accounts) => {
       nftAddress: nftFactory.address,
       tokenId: 1,
       contentHash: "0x4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45",
-      nonce: 1
+      nonce: 0
     };
 
     this.sign = ethSigUtil.signTypedMessage(
@@ -71,7 +71,7 @@ contract('Inscribe', (accounts) => {
                                               this.wallet.getAddressString(), 
                                               "0x4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45", 
                                               1,
-                                              1,
+                                              0,
                                               this.sign, {from: accounts[0]});
       }
   );
