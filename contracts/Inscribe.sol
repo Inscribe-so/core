@@ -80,14 +80,12 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     // Mapping from inscription Id to a hash of the nftAddress and tokenId
     mapping (uint256 => bytes32) private _locationHashes;
 
-    // mapping from inscription ID to base URI IDs
+    // Mapping from inscription ID to base URI IDs
     // Inscriptions managed by an operator use base uri
-    // URIs are of the form {baseUrl}/{inscriptionId}
+    // URIs are of the form {baseUrl}{inscriptionId}
     mapping (uint256 => uint256) private _baseURIIds;
 
-    // mapping from inscription ID to inscriptionURI
-    // for self managed sigs. 
-    // For example: ipfs sigs
+    // Mapping from inscription ID to inscriptionURI
     mapping (uint256 => string) private _inscriptionURIs;
 
     // mapping from an inscriber address to a mapping of location hash to nonces
@@ -132,21 +130,27 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         );
     }
 
-    // - Complete
+    /**
+     * @dev See {InscribeInterface-getInscriber}.
+     */
     function getInscriber(uint256 inscriptionId) external view override returns (address) {
         address inscriber = _inscribers[inscriptionId];
         require(inscriber != address(0), "Inscription does not exist");
         return inscriber;
     }
 
-    // - Verifies that `inscriptionId` is inscribed to the NFT at `nftAddress`, `tokenId`
+    /**
+     * @dev See {InscribeInterface-verifyInscription}.
+     */
     function verifyInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) public view override returns (bool) {
         bytes32 locationHash = _locationHashes[inscriptionId];
         return locationHash == keccak256(abi.encodePacked(nftAddress, tokenId));
     }
 
-    // - Returns the current nonce used for signing. This nonce is unique per inscirber and token id.
-    function getNonce(address inscriber, address nftAddress, uint256 tokenId) external view returns (uint256) {
+    /**
+     * @dev See {InscribeInterface-getInscriptionURI}.
+     */
+    function getNonce(address inscriber, address nftAddress, uint256 tokenId) external view override returns (uint256) {
         bytes32 locationHash = keccak256(abi.encodePacked(nftAddress, tokenId));
         return _nonces[inscriber][locationHash];
     }
@@ -206,8 +210,9 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
         return _operatorApprovals[owner][operator];
     }
 
-    // Called by inscription operators, smart contracts, or if the user wants to inscribe
-    // their own nfts
+    /**
+     * @dev See {InscribeApprovalInterface-addInscriptionWithNoSig}.
+     */
     function addInscriptionWithNoSig(
         address nftAddress,
         uint256 tokenId,
@@ -274,7 +279,7 @@ contract Inscribe is InscribeInterface, InscribeMetadata {
     /**
      * @dev See {InscribeInterface-addInscription}.
      */
-    function addInscriptionWithInscriptioniUri(
+    function addInscriptionWithInscriptionUri(
         address nftAddress,
         uint256 tokenId,
         address inscriber,

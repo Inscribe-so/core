@@ -33,6 +33,12 @@ interface InscribeInterface {
     // - Verifies that `inscriptionId` is inscribed to the NFT at `nftAddress`, `tokenId`
     function verifyInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) external view returns (bool);
 
+    /**
+     * @dev Fetches the nonce used while signing a signature.
+     * Note: If a user signs multiple times on the same NFT, only one sig will go through.
+     */
+    function getNonce(address inscriber, address nftAddress, uint256 tokenId) external view returns (uint256);
+
      /**
      * @dev Fetches the inscriptionURI at inscriptionId
      * 
@@ -132,7 +138,7 @@ interface InscribeInterface {
      * - `tokenId` The user calling this method must own the `tokenId` at `nftAddress` or has been approved
      * 
      */
-    function addInscriptionWithInscriptioniUri(
+    function addInscriptionWithInscriptionUri(
         address nftAddress,
         uint256 tokenId,
         address inscriber,
