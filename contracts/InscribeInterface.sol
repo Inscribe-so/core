@@ -30,7 +30,9 @@ interface InscribeInterface {
      */
     function getInscriber(uint256 inscriptionId) external view returns (address);
 
-    // - Verifies that `inscriptionId` is inscribed to the NFT at `nftAddress`, `tokenId`
+    /**
+     * @dev Verifies that `inscriptionId` is inscribed to the NFT at `nftAddress`, `tokenId`
+     */
     function verifyInscription(uint256 inscriptionId, address nftAddress, uint256 tokenId) external view returns (bool);
 
     /**
@@ -61,7 +63,7 @@ interface InscribeInterface {
     
     /**
      * @dev Similar to the ERC721 implementation, Approve or remove `operator` as an operator for the caller.
-     * Operators can call {addInscriptionWithSig} or {addInscription} for any nft owned by the caller.
+     * Operators can modify any inscription for any NFT owned by the caller.
      *
      * Requirements:
      *
@@ -72,17 +74,18 @@ interface InscribeInterface {
     function setApprovalForAll(address operator, bool approved) external;
     
     /**
-     * @dev Returns if the `operator` is allowed to inscribe or remove inscriptions for all nfts owned by `owner`
+     * @dev Returns if the `operator` is allowed to inscribe or remove inscriptions for all NFTs owned by `owner`
      *
      */
     function isApprovedForAll(address owner, address operator) external view returns (bool);
 
     /**
-     * @dev Adds an inscription on-chain to the specified nft. This is mainly used to sign your own NFTs or for 
+     * @dev Adds an inscription on-chain to the specified NFT. This is mainly used to sign your own NFTs or for 
      *      other smart contracts to add inscription functionality.
-     * @param nftAddress            The nft contract address
+     * @param nftAddress            The NFT contract address
      * @param tokenId               The tokenId of the NFT that is being signed
-     * @param contentHash           A hash of the content. This hash will not change and will be used to verify the contents in the frontent
+     * @param contentHash           A hash of the content. This hash will not change and will be used to verify the contents in the frontend. 
+     *                              This hash must be hosted by inscription operators at the baseURI in order to be considered a valid inscription.
      * @param baseUriId             The id of the inscription operator
      * 
      * Requirements:
@@ -98,13 +101,14 @@ interface InscribeInterface {
     ) external;
     
     /**
-     * @dev Adds an inscription on-chain to the specified nft. Call this method if you are using an inscription operator.
-     * @param nftAddress            The nft contract address
+     * @dev Adds an inscription on-chain to the specified NFT. Call this method if you are using an inscription operator.
+     * @param nftAddress            The NFT contract address
      * @param tokenId               The tokenId of the NFT that is being signed
      * @param inscriber             The address of the inscriber
-     * @param contentHash           A hash of the content. This hash will not change and will be used to verify the contents in the frontent
+     * @param contentHash           A hash of the content. This hash will not change and will be used to verify the contents in the frontend.
+     *                              This hash must be hosted by inscription operators at the baseURI in order to be considered a valid inscription.
      * @param baseUriId             The id of the inscription operator
-     * @param nonce                 A unique value to ensure every sig is different
+     * @param nonce                 A unique value to ensure every sig is different. Get this value by calling the function `getNonce`
      * @param sig                   Signature of the hash, signed by the inscriber
      * 
      * Requirements:
@@ -150,7 +154,6 @@ interface InscribeInterface {
 
     /**
      * @dev Removes inscription on-chain.
-     * @param inscriptionId   The ID of the inscription that will be removed
      * 
      * Requirements:
      * 
@@ -160,14 +163,16 @@ interface InscribeInterface {
 
     // -- Migrating URIs
 
-    // Migrations are necessary if you would like an inscription operator to host your content hash
-    // or if you would like to swap your inscrip 
-    // 
+    /**
+     * @dev  Migrations are necessary if you would like an inscription operator to host your content hash
+    *        or if you would like to swap to a new inscription operator.
+     */
     function migrateURI(uint256 inscriptionId, uint256 baseUriId, address nftAddress, uint256 tokenId) external;
 
-
-    // Migrates the URI to inscription URI. This is mainly to migrate to an ipfs link. The content hash must
-    // be stored at inscriptionURI in order to be considered valid by frontend.
+    /**
+     * @dev Migrates the URI to inscription URI. This is mainly to migrate to an ipfs link. The content hash must
+            be stored at inscriptionURI in order to be considered valid by frontend.
+     */
     function migrateURI(uint256 inscriptionId, string calldata inscriptionURI, address nftAddress, uint256 tokenId) external;
 
 }

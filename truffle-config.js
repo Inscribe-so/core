@@ -20,12 +20,22 @@ module.exports = {
   },
 
   networks: {
+    live: {
+      provider: function() {
+        return new HDWalletProvider(
+          `${process.env.INSCRIBE_LIVE_PRIVATE_KEY}`, 
+          `https://mainnet.infura.io/v3/${process.env.INFURA_ID}`)
+      },
+      gasPrice: 150000000000,
+      network_id: 1
+    },
     rinkeby: {
       provider: function() {
         return new HDWalletProvider(
           `${process.env.INSCRIBE_RINKEBY_PRIVATE_KEY}`, 
           `https://rinkeby.infura.io/v3/${process.env.INFURA_ID}`)
       },
+      gasPrice: 130000000000,
       network_id: 4
     },
     matic: {
